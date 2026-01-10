@@ -11,8 +11,11 @@ erDiagram
     races ||--o{ race_entries : "出走"
     horses ||--o{ race_entries : "出走"
     jockeys ||--o{ race_entries : "騎乗"
-    races ||--o{ bets : "対象"
-    bet_types ||--o{ bets : "種別"
+    races ||--o{ purchases : "対象"
+    bet_types ||--o{ purchases : "種別"
+    purchases ||--o{ purchase_selections : "選択"
+    purchases ||--o{ bets : "展開"
+    race_entries ||--o{ purchase_selections : "対象"
     bets ||--o{ bet_selections : "含む"
     race_entries ||--o{ bet_selections : "対象"
 
@@ -74,14 +77,27 @@ erDiagram
         boolean is_ordered "順序あり"
     }
 
-    bets {
+    purchases {
         int id PK
         int race_id FK
         int bet_type_id FK
-        int amount "購入金額"
+        string purchase_method "購入方式"
+        int amount_per_bet "1点あたり金額"
+        text reasoning "購入理由"
+    }
+
+    purchase_selections {
+        int id PK
+        int purchase_id FK
+        int race_entry_id FK
+        string role "役割(軸/相手等)"
+    }
+
+    bets {
+        int id PK
+        int purchase_id FK
         int payout "払戻金額"
         boolean is_hit "的中フラグ"
-        text reasoning "購入理由"
     }
 
     bet_selections {
@@ -186,24 +202,64 @@ erDiagram
 | 7 | sanrenpuku | 三連複 | 3 | FALSE |
 | 8 | sanrentan | 三連単 | 3 | TRUE |
 
-### bets (馬券)
+### purchases (購入)
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
 | id | INTEGER | PK, AUTO_INCREMENT | ID |
 | race_id | INTEGER | FK(races.id), NOT NULL | レースID |
 | bet_type_id | INTEGER | FK(bet_types.id), NOT NULL | 馬券種別ID |
-| amount | INTEGER | NOT NULL | 購入金額 |
-| payout | INTEGER | DEFAULT 0 | 払戻金額 |
-| is_hit | BOOLEAN | DEFAULT FALSE | 的中フラグ |
+| purchase_method | VARCHAR(20) | NOT NULL | 購入方式 |
+| amount_per_bet | INTEGER | NOT NULL | 1点あたり金額 |
 | reasoning | TEXT | | 購入理由 |
 | created_at | TIMESTAMP | NOT NULL | 作成日時 |
 | updated_at | TIMESTAMP | NOT NULL | 更新日時 |
 
-### bet_selections (馬券選択)
+**purchase_method の値:**
+| 値 | 説明 | 例 |
+|----|------|-----|
+| normal | 通常（1点買い） | 馬連 1-3 |
+| nagashi | 流し | 馬連 1→3,4,5 |
+| box | ボックス | 馬連 1,2,3 BOX |
+| formation | フォーメーション | 三連単 1,2→3,4→5,6 |
+
+### purchase_selections (購入時の選択)
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
 | id | INTEGER | PK, AUTO_INCREMENT | ID |
-| bet_id | INTEGER | FK(bets.id), NOT NULL | 馬券ID |
+| purchase_id | INTEGER | FK(purchases.id), NOT NULL | 購入ID |
+| race_entry_id | INTEGER | FK(race_entries.id), NOT NULL | 出走馬ID |
+| role | VARCHAR(20) | NOT NULL | 役割 |
+| created_at | TIMESTAMP | NOT NULL | 作成日時 |
+
+**role の値:**
+| purchase_method | role | 説明 |
+|-----------------|------|------|
+| normal | selection | 選択馬 |
+| nagashi | pivot | 軸 |
+| nagashi | partner | 相手 |
+| box | selection | 選択馬 |
+| formation | first | 1着候補 |
+| formation | second | 2着候補 |
+| formation | third | 3着候補 |
+
+**インデックス:**
+- (purchase_id, race_entry_id, role) UNIQUE
+
+### bets (展開後の買い目)
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | INTEGER | PK, AUTO_INCREMENT | ID |
+| purchase_id | INTEGER | FK(purchases.id), NOT NULL | 購入ID |
+| payout | INTEGER | DEFAULT 0 | 払戻金額 |
+| is_hit | BOOLEAN | DEFAULT FALSE | 的中フラグ |
+| created_at | TIMESTAMP | NOT NULL | 作成日時 |
+| updated_at | TIMESTAMP | NOT NULL | 更新日時 |
+
+### bet_selections (買い目の内容)
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | INTEGER | PK, AUTO_INCREMENT | ID |
+| bet_id | INTEGER | FK(bets.id), NOT NULL | 買い目ID |
 | race_entry_id | INTEGER | FK(race_entries.id), NOT NULL | 出走馬ID |
 | position | INTEGER | | 順位位置(馬単・三連単用: 1=1着, 2=2着, 3=3着、順不同の場合はNULL) |
 | created_at | TIMESTAMP | NOT NULL | 作成日時 |
